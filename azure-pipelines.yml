@@ -1,0 +1,163 @@
+# Docker
+# Build and push all Code Interpreter (codeapi) component images to a
+# container registry (e.g. Azure Container Registry).
+#
+# IMPORTANT — branching model for this repo:
+#   - `main` is reserved EXCLUSIVELY for syncing with the upstream
+#     open-source repository. It must never be built/pushed from here and
+#     must never be modified directly in this fork.
+#   - `latest` and `preview` are the deployable branches for this fork.
+#     Each push to either branch builds and pushes all component images,
+#     tagged with the branch name itself (so `latest` branch -> `:latest`
+#     image tag, `preview` branch -> `:preview` image tag).
+#
+# SECURITY — no credentials are stored in this file:
+#   - Registry authentication is handled entirely through an Azure DevOps
+#     "Docker Registry" service connection (Project Settings > Service
+#     connections). The service connection holds the registry URL and
+#     credentials securely on the Azure DevOps side; this pipeline only
+#     references it by NAME.
+#   - The service connection name (and optional image namespace/prefix)
+#     are supplied via an Azure DevOps Variable Group, not hardcoded here.
+#
+# REQUIRED SETUP (one-time, done in Azure DevOps, not in this file):
+#   1. Create a "Docker Registry" service connection pointing at your
+#      registry (e.g. Azure Container Registry via "Azure Container
+#      Registry" or generic "Docker Registry" auth).
+#   2. Create a Variable Group named `codeapi-acr` (Pipelines > Library)
+#      with the following variables:
+#        - dockerRegistryServiceConnection : name of the service connection
+#                                             created in step 1
+#        - imageRepositoryPrefix           : optional namespace/prefix for
+#                                             image names, e.g. '' or
+#                                             'codeapi/' (include trailing
+#                                             slash if non-empty)
+#   3. Link the `codeapi-acr` variable group to this pipeline in the
+#      Azure DevOps UI (Edit pipeline > Variables > Variable groups), or
+#      make sure the pipeline definition references it as below.
+#
+# Nothing sensitive (registry hostname, username, password, tokens) is
+# ever written into this YAML file.
+
+trigger:
+  branches:
+    include:
+      - latest
+      - preview
+    exclude:
+      - main
+
+pr: none
+
+resources:
+  repo: self
+
+variables:
+  - group: codeapi-acr
+  - name: tag
+    value: '$(Build.SourceBranchName)'
+
+stages:
+  - stage: BuildAndPush
+    displayName: Build and push CodeAPI images
+    jobs:
+      - job: api
+        displayName: codeapi-api
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: Docker@2
+            displayName: Build and push codeapi-api
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-api'
+              command: buildAndPush
+              Dockerfile: service/Dockerfile
+              buildContext: '.'
+              arguments: '--target api'
+              tags: |
+                $(tag)
+
+      - job: worker
+        displayName: codeapi-worker
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: Docker@2
+            displayName: Build and push codeapi-worker
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-worker'
+              command: buildAndPush
+              Dockerfile: service/Dockerfile
+              buildContext: '.'
+              arguments: '--target worker'
+              tags: |
+                $(tag)
+
+      - job: file_server
+        displayName: codeapi-file-server
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: Docker@2
+            displayName: Build and push codeapi-file-server
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-file-server'
+              command: buildAndPush
+              Dockerfile: service/Dockerfile
+              buildContext: '.'
+              arguments: '--target production'
+              tags: |
+                $(tag)
+
+      - job: egress_gateway
+        displayName: codeapi-egress-gateway
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: Docker@2
+            displayName: Build and push codeapi-egress-gateway
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-egress-gateway'
+              command: buildAndPush
+              Dockerfile: service/Dockerfile.egress-gateway
+              buildContext: '.'
+              arguments: '--target production'
+              tags: |
+                $(tag)
+
+      - job: tool_call_server
+        displayName: codeapi-tool-call-server
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: Docker@2
+            displayName: Build and push codeapi-tool-call-server
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-tool-call-server'
+              command: buildAndPush
+              Dockerfile: service/Dockerfile.tool-call-server
+              buildContext: '.'
+              arguments: '--target production'
+              tags: |
+                $(tag)
+
+      - job: sandbox_runner
+        displayName: codeapi-sandbox-runner
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: Docker@2
+            displayName: Build and push codeapi-sandbox-runner
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-sandbox-runner'
+              command: buildAndPush
+              Dockerfile: api/Dockerfile
+              buildContext: '.'
+              tags: |
+                $(tag)
