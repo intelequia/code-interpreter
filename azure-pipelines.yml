@@ -159,5 +159,6 @@ stages:
               command: buildAndPush
               Dockerfile: api/Dockerfile
               buildContext: '.'
+              arguments: '--target sandbox-runner-baked'
               tags: |
                 $(tag)
