@@ -49,9 +49,6 @@ trigger:
 
 pr: none
 
-resources:
-  repo: self
-
 variables:
   - group: codeapi-acr
   - name: tag
@@ -60,6 +57,7 @@ variables:
 stages:
   - stage: BuildAndPush
     displayName: Build and push CodeAPI images
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/latest'), eq(variables['Build.SourceBranch'], 'refs/heads/preview')))
     jobs:
       - job: api
         displayName: codeapi-api
@@ -67,14 +65,22 @@ stages:
           vmImage: ubuntu-latest
         steps:
           - task: Docker@2
-            displayName: Build and push codeapi-api
+            displayName: Build codeapi-api
             inputs:
               containerRegistry: '$(dockerRegistryServiceConnection)'
               repository: '$(imageRepositoryPrefix)codeapi-api'
-              command: buildAndPush
+              command: build
               Dockerfile: service/Dockerfile
               buildContext: '.'
               arguments: '--target api'
+              tags: |
+                $(tag)
+          - task: Docker@2
+            displayName: Push codeapi-api
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-api'
+              command: push
               tags: |
                 $(tag)
 
@@ -84,14 +90,22 @@ stages:
           vmImage: ubuntu-latest
         steps:
           - task: Docker@2
-            displayName: Build and push codeapi-worker
+            displayName: Build codeapi-worker
             inputs:
               containerRegistry: '$(dockerRegistryServiceConnection)'
               repository: '$(imageRepositoryPrefix)codeapi-worker'
-              command: buildAndPush
+              command: build
               Dockerfile: service/Dockerfile
               buildContext: '.'
               arguments: '--target worker'
+              tags: |
+                $(tag)
+          - task: Docker@2
+            displayName: Push codeapi-worker
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-worker'
+              command: push
               tags: |
                 $(tag)
 
@@ -101,14 +115,22 @@ stages:
           vmImage: ubuntu-latest
         steps:
           - task: Docker@2
-            displayName: Build and push codeapi-file-server
+            displayName: Build codeapi-file-server
             inputs:
               containerRegistry: '$(dockerRegistryServiceConnection)'
               repository: '$(imageRepositoryPrefix)codeapi-file-server'
-              command: buildAndPush
+              command: build
               Dockerfile: service/Dockerfile
               buildContext: '.'
               arguments: '--target production'
+              tags: |
+                $(tag)
+          - task: Docker@2
+            displayName: Push codeapi-file-server
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-file-server'
+              command: push
               tags: |
                 $(tag)
 
@@ -118,14 +140,22 @@ stages:
           vmImage: ubuntu-latest
         steps:
           - task: Docker@2
-            displayName: Build and push codeapi-egress-gateway
+            displayName: Build codeapi-egress-gateway
             inputs:
               containerRegistry: '$(dockerRegistryServiceConnection)'
               repository: '$(imageRepositoryPrefix)codeapi-egress-gateway'
-              command: buildAndPush
+              command: build
               Dockerfile: service/Dockerfile.egress-gateway
               buildContext: '.'
               arguments: '--target production'
+              tags: |
+                $(tag)
+          - task: Docker@2
+            displayName: Push codeapi-egress-gateway
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-egress-gateway'
+              command: push
               tags: |
                 $(tag)
 
@@ -135,14 +165,22 @@ stages:
           vmImage: ubuntu-latest
         steps:
           - task: Docker@2
-            displayName: Build and push codeapi-tool-call-server
+            displayName: Build codeapi-tool-call-server
             inputs:
               containerRegistry: '$(dockerRegistryServiceConnection)'
               repository: '$(imageRepositoryPrefix)codeapi-tool-call-server'
-              command: buildAndPush
+              command: build
               Dockerfile: service/Dockerfile.tool-call-server
               buildContext: '.'
               arguments: '--target production'
+              tags: |
+                $(tag)
+          - task: Docker@2
+            displayName: Push codeapi-tool-call-server
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-tool-call-server'
+              command: push
               tags: |
                 $(tag)
 
@@ -152,13 +190,21 @@ stages:
           vmImage: ubuntu-latest
         steps:
           - task: Docker@2
-            displayName: Build and push codeapi-sandbox-runner
+            displayName: Build codeapi-sandbox-runner (baked)
             inputs:
               containerRegistry: '$(dockerRegistryServiceConnection)'
               repository: '$(imageRepositoryPrefix)codeapi-sandbox-runner'
-              command: buildAndPush
+              command: build
               Dockerfile: api/Dockerfile
               buildContext: '.'
               arguments: '--target sandbox-runner-baked'
+              tags: |
+                $(tag)
+          - task: Docker@2
+            displayName: Push codeapi-sandbox-runner (baked)
+            inputs:
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              repository: '$(imageRepositoryPrefix)codeapi-sandbox-runner'
+              command: push
               tags: |
                 $(tag)
