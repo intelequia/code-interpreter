@@ -1,210 +1,78 @@
-# Docker
-# Build and push all Code Interpreter (codeapi) component images to a
-# container registry (e.g. Azure Container Registry).
-#
-# IMPORTANT — branching model for this repo:
-#   - `main` is reserved EXCLUSIVELY for syncing with the upstream
-#     open-source repository. It must never be built/pushed from here and
-#     must never be modified directly in this fork.
-#   - `latest` and `preview` are the deployable branches for this fork.
-#     Each push to either branch builds and pushes all component images,
-#     tagged with the branch name itself (so `latest` branch -> `:latest`
-#     image tag, `preview` branch -> `:preview` image tag).
-#
-# SECURITY — no credentials are stored in this file:
-#   - Registry authentication is handled entirely through an Azure DevOps
-#     "Docker Registry" service connection (Project Settings > Service
-#     connections). The service connection holds the registry URL and
-#     credentials securely on the Azure DevOps side; this pipeline only
-#     references it by NAME.
-#   - The service connection name (and optional image namespace/prefix)
-#     are supplied via an Azure DevOps Variable Group, not hardcoded here.
-#
-# REQUIRED SETUP (one-time, done in Azure DevOps, not in this file):
-#   1. Create a "Docker Registry" service connection pointing at your
-#      registry (e.g. Azure Container Registry via "Azure Container
-#      Registry" or generic "Docker Registry" auth).
-#   2. Create a Variable Group named `codeapi-acr` (Pipelines > Library)
-#      with the following variables:
-#        - dockerRegistryServiceConnection : name of the service connection
-#                                             created in step 1
-#        - imageRepositoryPrefix           : optional namespace/prefix for
-#                                             image names, e.g. '' or
-#                                             'codeapi/' (include trailing
-#                                             slash if non-empty)
-#   3. Link the `codeapi-acr` variable group to this pipeline in the
-#      Azure DevOps UI (Edit pipeline > Variables > Variable groups), or
-#      make sure the pipeline definition references it as below.
-#
-# Nothing sensitive (registry hostname, username, password, tokens) is
-# ever written into this YAML file.
-
 trigger:
   branches:
     include:
-      - latest
       - preview
-    exclude:
-      - main
+      - latest
 
 pr: none
 
 variables:
-  - group: codeapi-acr
-  - name: tag
-    value: '$(Build.SourceBranchName)'
+  - group: intelewriter-acr
+  - name: imageRepositoryPrefix
+    value: ''
+  - name: vmImageName
+    value: ubuntu-latest
 
-stages:
-  - stage: BuildAndPush
-    displayName: Build and push CodeAPI images
-    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/latest'), eq(variables['Build.SourceBranch'], 'refs/heads/preview')))
-    jobs:
-      - job: api
-        displayName: codeapi-api
-        pool:
-          vmImage: ubuntu-latest
-        steps:
-          - task: Docker@2
-            displayName: Build codeapi-api
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-api'
-              command: build
-              Dockerfile: service/Dockerfile
-              buildContext: '.'
-              arguments: '--target api'
-              tags: |
-                $(tag)
-          - task: Docker@2
-            displayName: Push codeapi-api
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-api'
-              command: push
-              tags: |
-                $(tag)
+pool:
+  vmImage: $(vmImageName)
 
-      - job: worker
-        displayName: codeapi-worker
-        pool:
-          vmImage: ubuntu-latest
-        steps:
-          - task: Docker@2
-            displayName: Build codeapi-worker
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-worker'
-              command: build
-              Dockerfile: service/Dockerfile
-              buildContext: '.'
-              arguments: '--target worker'
-              tags: |
-                $(tag)
-          - task: Docker@2
-            displayName: Push codeapi-worker
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-worker'
-              command: push
-              tags: |
-                $(tag)
+steps:
+  - checkout: self
+    fetchDepth: 1
 
-      - job: file_server
-        displayName: codeapi-file-server
-        pool:
-          vmImage: ubuntu-latest
-        steps:
-          - task: Docker@2
-            displayName: Build codeapi-file-server
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-file-server'
-              command: build
-              Dockerfile: service/Dockerfile
-              buildContext: '.'
-              arguments: '--target production'
-              tags: |
-                $(tag)
-          - task: Docker@2
-            displayName: Push codeapi-file-server
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-file-server'
-              command: push
-              tags: |
-                $(tag)
+  - bash: |
+      set -euo pipefail
 
-      - job: egress_gateway
-        displayName: codeapi-egress-gateway
-        pool:
-          vmImage: ubuntu-latest
-        steps:
-          - task: Docker@2
-            displayName: Build codeapi-egress-gateway
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-egress-gateway'
-              command: build
-              Dockerfile: service/Dockerfile.egress-gateway
-              buildContext: '.'
-              arguments: '--target production'
-              tags: |
-                $(tag)
-          - task: Docker@2
-            displayName: Push codeapi-egress-gateway
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-egress-gateway'
-              command: push
-              tags: |
-                $(tag)
+      if [[ "$SOURCE_BRANCH" != "preview" && "$SOURCE_BRANCH" != "latest" ]]; then
+        echo "Unsupported source branch: $SOURCE_BRANCH"
+        exit 1
+      fi
 
-      - job: tool_call_server
-        displayName: codeapi-tool-call-server
-        pool:
-          vmImage: ubuntu-latest
-        steps:
-          - task: Docker@2
-            displayName: Build codeapi-tool-call-server
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-tool-call-server'
-              command: build
-              Dockerfile: service/Dockerfile.tool-call-server
-              buildContext: '.'
-              arguments: '--target production'
-              tags: |
-                $(tag)
-          - task: Docker@2
-            displayName: Push codeapi-tool-call-server
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-tool-call-server'
-              command: push
-              tags: |
-                $(tag)
+      cleanup() {
+        docker logout "$ACR_LOGIN_SERVER" >/dev/null 2>&1 || true
+      }
+      trap cleanup EXIT
 
-      - job: sandbox_runner
-        displayName: codeapi-sandbox-runner
-        pool:
-          vmImage: ubuntu-latest
-        steps:
-          - task: Docker@2
-            displayName: Build codeapi-sandbox-runner (baked)
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-sandbox-runner'
-              command: build
-              Dockerfile: api/Dockerfile
-              buildContext: '.'
-              arguments: '--target sandbox-runner-baked'
-              tags: |
-                $(tag)
-          - task: Docker@2
-            displayName: Push codeapi-sandbox-runner (baked)
-            inputs:
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              repository: '$(imageRepositoryPrefix)codeapi-sandbox-runner'
-              command: push
-              tags: |
-                $(tag)
+      printf '%s' "$ACR_TOKEN_PASSWORD" |
+        docker login --password-stdin \
+          --username "$ACR_TOKEN_NAME" \
+          "$ACR_LOGIN_SERVER"
+
+      short_sha="${SOURCE_VERSION:0:12}"
+      immutable_tag="${SOURCE_BRANCH}-${BUILD_ID}-${short_sha}"
+      build_date="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+      build_image() {
+        local repository="$1"
+        local dockerfile="$2"
+        local target="$3"
+        local image="${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY_PREFIX}${repository}"
+
+        docker buildx build \
+          --platform linux/amd64 \
+          --file "$SOURCE_DIRECTORY/$dockerfile" \
+          --target "$target" \
+          --tag "${image}:${SOURCE_BRANCH}" \
+          --tag "${image}:${immutable_tag}" \
+          --build-arg "BUILD_COMMIT=${SOURCE_VERSION}" \
+          --build-arg "BUILD_BRANCH=${SOURCE_BRANCH}" \
+          --build-arg "BUILD_DATE=${build_date}" \
+          --push \
+          "$SOURCE_DIRECTORY"
+      }
+
+      build_image codeapi-api service/Dockerfile api
+      build_image codeapi-worker service/Dockerfile worker
+      build_image codeapi-file-server service/Dockerfile production
+      build_image codeapi-egress-gateway service/Dockerfile.egress-gateway production
+      build_image codeapi-tool-call-server service/Dockerfile.tool-call-server production
+      build_image codeapi-sandbox-runner api/Dockerfile sandbox-runner-baked
+    env:
+      ACR_LOGIN_SERVER: $(ACR_LOGIN_SERVER)
+      ACR_TOKEN_NAME: $(ACR_TOKEN_NAME)
+      ACR_TOKEN_PASSWORD: $(ACR_TOKEN_PASSWORD)
+      IMAGE_REPOSITORY_PREFIX: $(imageRepositoryPrefix)
+      SOURCE_BRANCH: $(Build.SourceBranchName)
+      SOURCE_VERSION: $(Build.SourceVersion)
+      BUILD_ID: $(Build.BuildId)
+      SOURCE_DIRECTORY: $(Build.SourcesDirectory)
