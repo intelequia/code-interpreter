@@ -28,10 +28,26 @@ steps:
         exit 1
       fi
 
+      cleanup_docker_space() {
+        docker buildx prune --all --force >/dev/null 2>&1 || true
+        docker system prune --all --force --volumes >/dev/null 2>&1 || true
+      }
+
+      report_disk_usage() {
+        echo "=== Disk usage ==="
+        df -h / || true
+        echo "=== Docker disk usage ==="
+        docker system df || true
+      }
+
       cleanup() {
+        cleanup_docker_space
         docker logout "$ACR_LOGIN_SERVER" >/dev/null 2>&1 || true
       }
       trap cleanup EXIT
+
+      cleanup_docker_space
+      report_disk_usage
 
       printf '%s' "$ACR_TOKEN_PASSWORD" |
         docker login --password-stdin \
@@ -59,6 +75,9 @@ steps:
           --build-arg "BUILD_DATE=${build_date}" \
           --push \
           "$SOURCE_DIRECTORY"
+
+        cleanup_docker_space
+        report_disk_usage
       }
 
       build_image codeapi-api service/Dockerfile api
