@@ -9,8 +9,17 @@ if [ ! -d "$rootfs" ]; then
     exit 1
 fi
 
-mkdir -p "$rootfs/dev" "$rootfs/proc" "$rootfs/sys" "$rootfs/tmp" "$rootfs/run" "$rootfs/mnt"
-chmod 1777 "$rootfs/tmp"
+if [[ "${ROOTFS_READ_ONLY:-false}" == "true" ]]; then
+    for directory in dev proc sys tmp run mnt; do
+        if [[ ! -d "$rootfs/$directory" ]]; then
+            echo "required rootfs directory is missing: $rootfs/$directory" >&2
+            exit 1
+        fi
+    done
+else
+    mkdir -p "$rootfs/dev" "$rootfs/proc" "$rootfs/sys" "$rootfs/tmp" "$rootfs/run" "$rootfs/mnt"
+    chmod 1777 "$rootfs/tmp"
+fi
 
 used_kib=$(du -sk "$rootfs" | awk '{print $1}')
 # Give ext4 enough headroom for metadata and future small additions, then shrink

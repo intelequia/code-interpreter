@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # Standalone sandbox API Dockerfile (development)
 # Boots the sandbox server inside a libkrun microVM with its own kernel.
 # Only requires /dev/kvm on the host — no privileged mode, no capabilities.
@@ -132,6 +134,8 @@ COPY api/config ./config
 RUN bun run build
 
 RUN mkdir -p /pkgs /tmp/sandbox
+RUN mkdir -p /dev /proc /sys /tmp /run /mnt && chmod 1777 /tmp
+RUN sed -i '/^cgroup_mem_swap_max/d' /sandbox_api/config/sandbox.cfg
 
 RUN find / -xdev -perm /6000 -exec chmod ug-s {} + 2>/dev/null || true
 
@@ -199,25 +203,22 @@ RUN chmod +x /usr/local/bin/launcher-entrypoint.sh /usr/local/bin/start-direct-s
 EXPOSE 2000/tcp
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
-FROM debian:bookworm AS sandbox-rootfs-image
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    e2fsprogs \
-    coreutils \
-    gawk \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=sandbox-build / /sandbox-rootfs/
-COPY --from=package-builder /pkgs /sandbox-rootfs/pkgs
-COPY docker/build-rootfs-image.sh /usr/local/bin/build-rootfs-image.sh
-
-RUN sed -i '/^cgroup_mem_swap_max/d' /sandbox-rootfs/sandbox_api/config/sandbox.cfg
-RUN chmod +x /usr/local/bin/build-rootfs-image.sh \
-    && /usr/local/bin/build-rootfs-image.sh /sandbox-rootfs /sandbox-rootfs.img
-
 FROM sandbox-runner-base AS sandbox-runner-baked
 
-COPY --from=sandbox-rootfs-image /sandbox-rootfs.img /sandbox-rootfs.img
+COPY docker/build-rootfs-image.sh /tmp/build-rootfs-image.sh
+
+# Build the guest disk directly in the final stage. The source stages are
+# mounted read-only so Docker does not materialize a second copy of the full
+# rootfs before copying the resulting image into the runtime image.
+RUN --mount=type=bind,from=sandbox-build,source=/,target=/sandbox-rootfs,readonly \
+    --mount=type=bind,from=package-builder,source=/pkgs,target=/sandbox-rootfs/pkgs,readonly \
+    dnf install -y --setopt=install_weak_deps=False e2fsprogs \
+    && chmod +x /tmp/build-rootfs-image.sh \
+    && ROOTFS_READ_ONLY=true /tmp/build-rootfs-image.sh /sandbox-rootfs /sandbox-rootfs.img \
+    && rm -f /tmp/build-rootfs-image.sh \
+    && dnf remove -y e2fsprogs \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
 
 ENV LAUNCHER_ROOT_DISK=/sandbox-rootfs.img \
     LAUNCHER_ROOT_DISK_READ_ONLY=true \
